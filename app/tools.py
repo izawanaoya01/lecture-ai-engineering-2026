@@ -5,10 +5,13 @@
 """
 
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -77,3 +80,32 @@ def get_lecture_summary(lecture: int) -> str:
         available = sorted(p.stem for p in (DATA_DIR / "lectures").glob("*.md"))
         return f"第{lecture}回の要点はまだありません。用意されている回: {', '.join(available)}"
     return path.read_text(encoding="utf-8")
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回（1始まりの整数）の用語から1つを選び、確認問題と答えを返す。
+
+    「第2回の確認問題を出して」のように、復習用の問題を求められたときに使う。
+    """
+    glossary = load_glossary()
+    terms = [e for e in glossary if e["lecture"] == lecture]
+    if not terms:
+        available = sorted({e["lecture"] for e in glossary})
+        return f"第{lecture}回の用語は用語集にありません。用語がある回: {', '.join(map(str, available))}"
+    entry = random.choice(terms)
+    return json.dumps(
+        {"question": f"「{entry['term']}」の意味は？", "answer": entry["definition"]},
+        ensure_ascii=False,
+    )
+
+
+def save_learning_log(title: str, content: str) -> str:
+    """学習の記録を learning_log/ フォルダに Markdown ファイルとして保存する。
+
+    「今日学んだことを記録して」のように、利用者が学習の記録を残すよう頼んだときだけ使う。
+    保存の前に、利用者の確認が入る。
+    """
+    LOG_DIR.mkdir(exist_ok=True)
+    path = LOG_DIR / f"{datetime.now():%Y%m%d-%H%M%S}.md"
+    path.write_text(f"# {title}\n\n{content}\n", encoding="utf-8")
+    return f"{path.relative_to(LOG_DIR.parent)} に保存しました。"
