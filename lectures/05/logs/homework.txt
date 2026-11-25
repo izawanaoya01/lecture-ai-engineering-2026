@@ -1,0 +1,105 @@
+# 第5回 宿題（基礎）の実行ログ（2026-11-25）
+# 変更：app/config.py の RAG_TOP_K を 5 → 2
+# モデル: gemini-3.5-flash-lite
+# Q2: 第3回の例では、コンパクションとセッションをまたぐメモリはどう 違いますか。日々のメモはすべて長期メモリに入りますか
+#     （「どう 違いますか」の空白は貼り付けのときに入ったもの。変更前後とも同じ文）
+# Q1: 第2回の説明では、LoRAは何を固定し何を学習しますか？ QLoRAは何を加えますか？
+# 503（混雑）で失敗した回は、回数だけ記録して出力は省略した
+# 検索結果の本文は data/rag_data/lectures.json で確認できるため、ページの一覧だけを残した
+
+======================== RAG_TOP_K = 5（変更前） ========================
+
+$ uv run python -m app.retrieval "$AIE_Q2"
+検索結果 1: AIエージェント / Appendix / 補足：メモリと Context Engineering の最新動向 / ページ 65
+検索結果 2: AIエージェント / Part 6 メモリ / 実装例：Claude / ページ 39
+検索結果 3: AIエージェント / Part 6 メモリ / メモリがないと、毎回ゼロからやり直しになる / ページ 38
+検索結果 4: AIエージェント / Part 6 メモリ / 実装例：OpenClaw / ページ 40
+検索結果 5: AIエージェント / Part 2 エージェントを組み立てる / メモリ / ページ 13
+
+$ uv run python -m app.agent --trace "$AIE_Q2"   # 503 で 13 回失敗した後
+[model] gemini-3.5-flash-lite
+第3回の講義資料に基づき、ご質問の2点についてお答えします。
+
+### 1. コンパクションとセッションをまたぐメモリの違い
+* **コンパクション（履歴を要約して詰める）**
+  * **場所・範囲**：コンテキストの中（同じセッション内）で機能します（第3回・PDF p.39）。
+  * **仕組み**：セッション内の古い履歴を要約に置き換えることで、コンテキストの容量を圧縮します（第3回・PDF p.39）。
+* **セッションをまたぐメモリ（外の保存先）**
+  * **場所・範囲**：コンテキストの外の保存先（ファイルなど）に保存され、セッションをまたいで引き継がれます（第3回・PDF p.39）。
+  * **仕組み**：エージェントが必要に応じて読み書きし、次回の会話や新しいセッションのコンテキストに読み戻されます（第3回・PDF p.13, p.39）。
+
+---
+
+### 2. 日々のメモはすべて長期メモリに入りますか？
+* **すべては入りません。**
+* OpenClawの例では、日々のメモ（`memory/日付.md`）の中から、毎晩の自動見直し（dreaming）によって重複を除いてテーマを見比べ、**基準を超えたものだけ**が長期メモリ（`MEMORY.md`）に移されます（第3回・PDF p.40）。
+* 一度きりの調べものは日々のメモに残るだけであり、長期メモリが膨らまないように設計されています（第3回・PDF p.40）。
+
+--- trace ---
+[tool call]   search_materials({'query': 'コンパクション'})
+[tool call]   search_materials({'query': 'セッション'})
+[tool call]   search_materials({'query': '長期メモリ'})
+[tool return] search_materials -> {"results": [{"page_id": "lec03-main-p065", "document_id": "lec03-main", "lecture": 3, "document_title": "AIエージェント", "se…
+[tool return] search_materials -> {"results": [{"page_id": "lec02-main-p019", "document_id": "lec02-main", "lecture": 2, "document_title": "基盤モデルの仕組み", "s…
+[tool return] search_materials -> {"results": [{"page_id": "lec03-main-p040", "document_id": "lec03-main", "lecture": 3, "document_title": "AIエージェント", "se…
+[time] 回答完了まで 9.74 秒（検索・埋め込みを含む）
+[usage] 入力 5,586 tokens / 出力 414 tokens / モデル応答 2 回
+[cost] 生成APIの推定コスト: $0.002711 USD（埋め込み・索引構築分は含まない）
+
+# Q1 の変更前の結果は logs/exercise.txt の「uv run python -m app.agent --trace」（4.63 秒、入力 3,400 tokens）
+
+======================== RAG_TOP_K = 2（変更後） ========================
+
+$ uv run python -m app.retrieval "$AIE_Q2"
+検索結果 1: AIエージェント / Appendix / 補足：メモリと Context Engineering の最新動向 / ページ 65
+検索結果 2: AIエージェント / Part 6 メモリ / 実装例：Claude / ページ 39
+
+$ uv run python -m app.agent --trace "$AIE_Q2"   # 503 で 1 回失敗した後
+[model] gemini-3.5-flash-lite
+第3回の講義資料をもとに、ご質問の2点についてお答えします。
+
+### 1. コンパクションとセッションをまたぐメモリの違いについて
+Claudeなどの実装例において、両者は「どこで使われるか（スコープ）」と「情報の扱い方」が異なります（第3回・PDF p.39、p.65）。
+
+* **コンパクション（履歴の要約）**
+  * **スコープ**: コンテキストの中（同じセッション内）の仕組みです。
+  * **仕組み**: 長いやり取りによってコンテキストの上限に近づいた際、古い履歴を要約に置き換えて情報を圧縮します（第3回・PDF p.39）。
+* **セッションをまたぐメモリ（メモリツールや自動メモリ）**
+  * **スコープ**: 外の保存先（セッションをまたぐ）の仕組みです。
+  * **仕組み**: セッションが終了しても残る外部のファイル（例: `/memories` のファイルなど）に情報を書き出し、次回の会話や別のセッションのコンテキストに読み戻します（第3回・PDF p.39）。
+
+---
+
+### 2. 日々のメモはすべて長期メモリに入りますか？
+**いいえ、すべてが長期メモリに入るわけではありません。**
+
+OpenClawの実装例では、日々のやり取りはまず「日々のメモ（`memory/日付.md`）」に記録されますが、そこから毎晩自動で見直し（dreaming）が行われます（第3回・PDF p.40）。
+* **見直しのプロセス**: 重複を除いて候補を並べ、何度も出てくるテーマを探し、基準を超えたものだけを長期メモリ（`MEMORY.md`）に移します（第3回・PDF p.40）。
+* **残らないもの**: 一度きりの調べものは日々のメモに残るだけであり、すべてを蓄積すると長期メモリが膨らんでしまうため、基準を超えたものだけを残す仕組みになっています（第3回・PDF p.40）。
+
+--- trace ---
+[tool call]   search_materials({'query': 'コンパクション セッション'})
+[tool call]   search_materials({'query': '長期メモリ 日々のメモ'})
+[tool return] search_materials -> {"results": [{"page_id": "lec03-main-p065", "document_id": "lec03-main", "lecture": 3, "document_title": "AIエージェント", "se…
+[tool return] search_materials -> {"results": [{"page_id": "lec03-main-p040", "document_id": "lec03-main", "lecture": 3, "document_title": "AIエージェント", "se…
+[time] 回答完了まで 5.86 秒（検索・埋め込みを含む）
+[usage] 入力 2,593 tokens / 出力 487 tokens / モデル応答 2 回
+[cost] 生成APIの推定コスト: $0.001995 USD（埋め込み・索引構築分は含まない）
+
+$ uv run python -m app.agent --trace "$AIE_QUESTION"   # 503 で 4 回失敗した後
+[model] gemini-3.5-flash-lite
+第2回の資料によると、LoRAおよびQLoRAの仕組みは以下の通りです。
+
+- **LoRAが固定するもの**
+  - 元の重み $W$ （本体）は固定し、学習しません（第2回・PDF p.51, p.52）。
+- **LoRAが学習するもの**
+  - 細長い2つの小さな行列の積（低ランク）で表される変化分（小さな行列 A・B）だけを学習します（第2回・PDF p.51, p.52）。
+- **QLoRAが加えるもの**
+  - LoRAに加えて、**元の重みを4bitに圧縮（数値を粗く保存）すること**を加えます（第2回・PDF p.51, p.52）。
+
+--- trace ---
+[tool call]   search_materials({'query': 'LoRA QLoRA 固定 学習'})
+[tool return] search_materials -> {"results": [{"page_id": "lec02-main-p052", "document_id": "lec02-main", "lecture": 2, "document_title": "基盤モデルの仕組み", "s…
+[time] 回答完了まで 4.67 秒（検索・埋め込みを含む）
+[usage] 入力 2,112 tokens / 出力 195 tokens / モデル応答 2 回
+[cost] 生成APIの推定コスト: $0.001121 USD（埋め込み・索引構築分は含まない）
